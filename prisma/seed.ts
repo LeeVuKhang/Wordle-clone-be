@@ -106,7 +106,7 @@ const EXTRA_VALID_GUESSES: string[] = [
 ];
 
 async function main(): Promise<void> {
-    console.log('🌱 Starting seed...');
+    console.log(' Starting seed...');
 
     // Clear existing word bank data
     await prisma.wordBank.deleteMany();
@@ -136,15 +136,15 @@ async function main(): Promise<void> {
         skipDuplicates: true,
     });
 
-    console.log(`  ✅ Seeded ${result.count} words to WordBank`);
+    console.log(`   Seeded ${result.count} words to WordBank`);
     console.log(`     Answer words: ${answerData.length}`);
     console.log(`     Valid guesses: ${guessData.length}`);
-    console.log('🌱 Seed complete!');
+    console.log('Seed complete!');
 }
 
 main()
     .catch((e) => {
-        console.error('❌ Seed failed:', e);
+        console.error('Seed failed:', e);
         process.exit(1);
     })
     .finally(async () => {
