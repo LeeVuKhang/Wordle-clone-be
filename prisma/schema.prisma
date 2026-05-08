@@ -1,0 +1,115 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// User — Authenticated player (Google OAuth)
+// ============================================================
+model User {
+  id               String      @id @default(cuid())
+  email            String      @unique
+  username         String?
+  // Reserved for future local auth (not implemented in this version — Google OAuth only)
+  passwordHash     String?
+  oauthProvider    String?
+  oauthId          String?
+  refreshTokenHash String?
+  currentStreak    Int         @default(0)
+  maxStreak        Int         @default(0)
+  lastDailyDate    DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  dailyGames DailyGame[]
+
+  // Note: gamesPlayed and gamesWon are dynamically derived from dailyGames
+
+  @@index([oauthProvider, oauthId])
+}
+
+// ============================================================
+// DailyWord — One word per day for all users (cronjob-generated)
+// ============================================================
+model DailyWord {
+  id        String   @id @default(cuid())
+  word      String   @db.VarChar(5)
+  gameDate  DateTime @unique
+  createdAt DateTime @default(now())
+
+  dailyGames DailyGame[]
+
+  @@index([gameDate])
+}
+
+// ============================================================
+// GameStatus — Enum for game state
+// ============================================================
+enum GameStatus {
+  PLAYING
+  WON
+  LOST
+}
+
+// ============================================================
+// DailyGame — One game per user/guest per day
+// ============================================================
+model DailyGame {
+  id          String     @id @default(cuid())
+  userId      String?
+  guestUuid   String?
+  gameDate    DateTime
+  status      GameStatus @default(PLAYING)
+  attempts    Int        @default(0)
+  completedAt DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  dailyWordId String
+  dailyWord   DailyWord @relation(fields: [dailyWordId], references: [id])
+  user        User?     @relation(fields: [userId], references: [id])
+  guesses     DailyGuess[]
+
+  @@unique([userId, gameDate])
+  @@unique([guestUuid, gameDate])
+  @@index([userId])
+  @@index([guestUuid])
+  @@index([gameDate])
+  @@index([status])
+}
+
+// ============================================================
+// DailyGuess — Individual guess within a DailyGame
+// ============================================================
+model DailyGuess {
+  id            String    @id @default(cuid())
+  gameId        String
+  guessWord     String    @db.VarChar(5)
+  attemptNumber Int
+  createdAt     DateTime  @default(now())
+
+  game DailyGame @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, attemptNumber])
+  @@index([gameId])
+}
+
+// ============================================================
+// WordBank — Pool of valid words for the game
+// ============================================================
+model WordBank {
+  id        String   @id @default(cuid())
+  word      String   @unique @db.VarChar(5)
+  isAnswer  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([isAnswer])
+  @@index([word])
+}
