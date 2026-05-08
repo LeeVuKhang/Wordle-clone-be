@@ -1,3 +1,4 @@
+/// <reference types="node" />
 /**
  * Prisma Seed Script — WordBank data
  * 
