@@ -128,7 +128,7 @@ async function main(): Promise<void> {
     const allWords = [...answerData, ...guessData];
     const uniqueWords = Array.from(
         new Map(allWords.map(w => [w.word, w])).values()
-    );
+    ).filter(w => w.word.length === 5);
 
     // Batch insert
     const result = await prisma.wordBank.createMany({

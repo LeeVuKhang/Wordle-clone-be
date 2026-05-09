@@ -7,6 +7,7 @@
  * @see WBS Phase 6, Phase 7
  */
 
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -29,8 +30,7 @@ import gameRoutes from './modules/game/game.routes.js';
 import practiceRoutes from './modules/practice/practice.routes.js';
 import authRoutes from './modules/auth/auth.routes.js';
 
-// Load environment variables
-dotenv.config();
+
 
 const app = express();
 const PORT = process.env.PORT || 3000;
