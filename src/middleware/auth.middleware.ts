@@ -4,24 +4,40 @@
  * Populates res.locals with userId (JWT) or guestUuid (X-Guest-ID header).
  * Does NOT reject unauthenticated requests — downstream handlers decide access.
  *
- * @see WBS Tasks 7.3, 7.5 (partial — full OAuth in Phase 7)
+ * @see WBS Tasks 7.3, 7.5
  */
 
 import { Request, Response, NextFunction } from 'express';
+import { verifyAccessToken } from '../modules/auth/auth.service.js';
 
+/**
+ * Identity extraction middleware (runs on every request).
+ *
+ * 1. Try JWT from httpOnly cookie `access_token`
+ * 2. Fallback: Guest UUID from `X-Guest-ID` header
+ *
+ * Never rejects — just populates res.locals for downstream use.
+ */
 export function identityMiddleware(req: Request, res: Response, next: NextFunction): void {
-    // Try JWT from cookie first (Phase 7 will implement full JWT verification)
-    // For now, placeholder — will be enhanced in Phase 7
+    // ---- JWT from cookie ----
     const accessToken = req.cookies?.access_token;
     if (accessToken) {
-        // TODO: Phase 7 — verify JWT and set res.locals.userId
-        // For now, skip JWT verification
+        try {
+            const payload = verifyAccessToken(accessToken);
+            res.locals.userId = payload.sub;
+            res.locals.userEmail = payload.email;
+        } catch {
+            // Token invalid or expired — treat as unauthenticated
+            // FE should call POST /api/auth/refresh when it gets 401
+        }
     }
 
-    // Fallback: Guest UUID from header
-    const guestUuid = req.headers['x-guest-id'] as string | undefined;
-    if (guestUuid) {
-        res.locals.guestUuid = guestUuid;
+    // ---- Fallback: Guest UUID ----
+    if (!res.locals.userId) {
+        const guestUuid = req.headers['x-guest-id'] as string | undefined;
+        if (guestUuid && isValidUUID(guestUuid)) {
+            res.locals.guestUuid = guestUuid;
+        }
     }
 
     next();
@@ -43,4 +59,30 @@ export function requireIdentity(req: Request, res: Response, next: NextFunction)
         return;
     }
     next();
+}
+
+/**
+ * Require authenticated user (JWT).
+ * Returns 401 if not logged in.
+ */
+export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+    if (!res.locals.userId) {
+        res.status(401).json({
+            error: {
+                code: 'UNAUTHORIZED',
+                message: 'Authentication required',
+            },
+        });
+        return;
+    }
+    next();
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+/** Basic UUID v4 format validation for guest UUIDs (Task 7.3) */
+function isValidUUID(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

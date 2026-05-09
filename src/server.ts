@@ -2,12 +2,14 @@
  * Wordle Clone — Express Server Entry Point
  *
  * Mounts all route modules, middleware pipeline, and cron service.
+ * Security hardened with Helmet + strict CORS (WBS 7.8).
  *
- * @see WBS Phase 6
+ * @see WBS Phase 6, Phase 7
  */
 
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
@@ -25,22 +27,50 @@ import { errorMiddleware } from './middleware/error.middleware.js';
 // Routes
 import gameRoutes from './modules/game/game.routes.js';
 import practiceRoutes from './modules/practice/practice.routes.js';
+import authRoutes from './modules/auth/auth.routes.js';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// ============================================================
+// Security Hardening (Task 7.8)
+// ============================================================
+
+// Helmet — secure HTTP headers
+app.use(helmet({
+    // Allow cross-origin requests for API (Vercel FE → Railway BE)
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
+
+// CORS — strict origins (Task 7.8)
+const ALLOWED_ORIGINS = [
+    process.env.FRONTEND_URL || 'http://localhost:5173',
+    // Add production domain(s) here
+].filter(Boolean);
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (mobile apps, curl, server-to-server)
+        if (!origin) return callback(null, true);
+        if (ALLOWED_ORIGINS.includes(origin)) {
+            return callback(null, true);
+        }
+        callback(new Error(`CORS: Origin ${origin} not allowed`));
+    },
+    credentials: true,    // Required for httpOnly cookies (access_token, refresh_token)
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Guest-ID', 'X-Correlation-ID'],
+}));
 
 // ============================================================
 // Global Middleware (Chain of Responsibility)
 // ============================================================
 
-app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    credentials: true,
-}));
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));  // Prevent large payload attacks
 app.use(cookieParser());
 app.use(identityMiddleware);
 app.use(rateLimitMiddleware);
@@ -52,7 +82,7 @@ app.use(rateLimitMiddleware);
 app.get('/', (_req: Request, res: Response) => {
     res.json({
         message: 'Wordle Clone API Server',
-        version: '2.0.0',
+        version: '3.0.0',
         status: 'running',
     });
 });
@@ -60,6 +90,9 @@ app.get('/', (_req: Request, res: Response) => {
 app.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
+
+// Auth routes (Phase 7)
+app.use('/api/auth', authRoutes);
 
 // Game routes (with input validation on sync)
 app.use('/api/game', gameRoutes);
@@ -104,6 +137,7 @@ async function bootstrap(): Promise<void> {
     const server = app.listen(PORT, () => {
         console.log(`Server is running on http://localhost:${PORT}`);
         console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`CORS origins: ${ALLOWED_ORIGINS.join(', ')}`);
     });
 
     // Graceful shutdown (WBS 10.6)
