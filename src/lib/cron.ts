@@ -9,6 +9,8 @@
 
 import { prisma } from './prisma.js';
 import { redis, REDIS_KEYS, REDIS_TTL } from './redis.js';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Select and publish today's daily word.
@@ -45,24 +47,26 @@ export async function selectDailyWord(): Promise<void> {
     });
     const usedSet = new Set(usedWords.map(w => w.word));
 
-    // Pick random unused answer word
-    const availableWords = await prisma.wordBank.findMany({
-        where: { isAnswer: true },
-        select: { word: true },
-    });
+    // Load common words for daily wordle
+    const dictPath = path.join(process.cwd(), 'src', 'data', 'wordle-dictionary.txt');
+    const dictContent = fs.readFileSync(dictPath, 'utf-8');
+    const availableWords = dictContent
+        .split('\n')
+        .map(w => w.trim().toUpperCase())
+        .filter(w => w.length === 5);
 
-    const candidates = availableWords.filter(w => !usedSet.has(w.word));
+    const candidates = availableWords.filter(w => !usedSet.has(w));
     if (candidates.length === 0) {
         console.error('CRITICAL: No unused answer words available!');
         throw new Error('Word bank exhausted');
     }
 
-    const selected = candidates[Math.floor(Math.random() * candidates.length)];
+    const selectedWord = candidates[Math.floor(Math.random() * candidates.length)];
 
     // Step 1: Write to DB first (prevents orphaned cache keys)
     const dailyWord = await prisma.dailyWord.create({
         data: {
-            word: selected.word,
+            word: selectedWord,
             gameDate: today,
         },
     });

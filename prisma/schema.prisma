@@ -108,9 +108,7 @@ model DailyGuess {
 model WordBank {
   id        String   @id @default(cuid())
   word      String   @unique @db.VarChar(5)
-  isAnswer  Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  @@index([isAnswer])
   @@index([word])
 }

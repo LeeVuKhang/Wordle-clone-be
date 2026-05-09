@@ -10,6 +10,8 @@ import { prisma } from '../../lib/prisma.js';
 import { redis, REDIS_KEYS, REDIS_TTL } from '../../lib/redis.js';
 import type { LetterResult, PracticeGuessResultDTO } from '../game/game.types.js';
 import { randomUUID } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 interface PracticeSession {
     word: string;
@@ -21,20 +23,22 @@ interface PracticeSession {
 // ============================================================
 
 export async function createSession(): Promise<{ practiceId: string }> {
-    // Pick random answer word from WordBank
-    const count = await prisma.wordBank.count({ where: { isAnswer: true } });
-    const skip = Math.floor(Math.random() * count);
-    const word = await prisma.wordBank.findFirst({
-        where: { isAnswer: true },
-        skip,
-    });
+    // Pick random answer word from wordle-dictionary.txt
+    const dictPath = path.join(process.cwd(), 'src', 'data', 'wordle-dictionary.txt');
+    const dictContent = fs.readFileSync(dictPath, 'utf-8');
+    const availableWords = dictContent
+        .split('\n')
+        .map(w => w.trim().toUpperCase())
+        .filter(w => w.length === 5);
 
-    if (!word) {
-        throw new Error('No answer words found in WordBank. Run prisma db seed.');
+    if (availableWords.length === 0) {
+        throw new Error('No answer words found in dictionary.');
     }
 
+    const word = availableWords[Math.floor(Math.random() * availableWords.length)];
+
     const practiceId = `prac_${randomUUID().slice(0, 12)}`;
-    const session: PracticeSession = { word: word.word, guesses: [] };
+    const session: PracticeSession = { word: word, guesses: [] };
 
     await redis.set(REDIS_KEYS.practice(practiceId), session, {
         ex: REDIS_TTL.PRACTICE_SESSION,
